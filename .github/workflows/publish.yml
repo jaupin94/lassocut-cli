@@ -1,0 +1,22 @@
+# Publishes lassocut-cli to npm with a provenance statement when a version tag (v1.2.3) is pushed.
+# Authentication: npm Trusted Publisher for this repository and workflow (no token stored anywhere).
+name: Publish
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC token for npm trusted publishing and provenance
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm test
+      - run: npm publish --provenance --access public
