@@ -139,3 +139,43 @@ test("asks before large batches; -1 never asks", async () => {
   assert.equal(asked, 1);
   assert.equal(api.seen.length, 3);
 });
+
+test("login: opens lassocut, waits for approval, saves the key; logout forgets it", async () => {
+  let polls = 0;
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      if (req.url.startsWith("/v1.0/connect/")) res.writeHead(200, { "Content-Type": "application/json" });
+      if (req.url === "/v1.0/connect/start") {
+        assert.equal(JSON.parse(body).client, "cli");
+        res.end(JSON.stringify({ device_code: "dev", user_code: "ABCD-EFGH", verification_url: "https://www.lassocut.com/connect/?code=ABCD-EFGH", interval: 0, expires_in: 60 }));
+      } else if (req.url === "/v1.0/connect/poll") {
+        polls++;
+        res.end(JSON.stringify(polls < 2 ? { status: "pending" } : { status: "approved", api_key: "rbg_from_login" }));
+      } else {
+        assert.equal(req.headers["x-api-key"], "rbg_from_login");   // later runs use the saved key
+        res.writeHead(200, { "Content-Type": "image/png" }); res.end(PNG);
+      }
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const dir = await tmpdir();
+  const env = { LASSOCUT_API_URL: `http://127.0.0.1:${server.address().port}/v1.0`, LASSOCUT_CONFIG: path.join(dir, "config.json") };
+  const opened = [], lines = [];
+  try {
+    const code = await run(["login"], { env, log: (l) => lines.push(l), error: () => {}, openUrl: (u) => opened.push(u), sleep: async () => {} });
+    assert.equal(code, 0);
+    assert.deepEqual(opened, ["https://www.lassocut.com/connect/?code=ABCD-EFGH"]);
+    assert.ok(lines.some((l) => l.includes("ABCD-EFGH")));
+    assert.equal(JSON.parse(await readFile(env.LASSOCUT_CONFIG, "utf8")).api_key, "rbg_from_login");
+    const img = path.join(dir, "a.jpg");
+    await writeFile(img, PNG);
+    assert.equal(await run([img], { env, ...quiet }), 0);
+    assert.equal(await run(["logout"], { env, ...quiet }), 0);
+    assert.equal(existsSync(env.LASSOCUT_CONFIG), false);
+    assert.throws(() => resolveConfig(parseArgs([img]).opts, env), /lassocut login/);
+  } finally {
+    server.close();
+  }
+});

@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // lassocut CLI: remove image backgrounds in bulk with the lassocut API.
 // Copyright (c) 2026 JAUPIN Design LLC. No dependencies: Node 18+ (fetch, FormData, Blob).
-import { readFile, writeFile, readdir, stat, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFile, writeFile, readdir, stat, mkdir, rm } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 export const DEFAULT_API_URL = "https://api.lassocut.com/v1.0";
 const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".bmp", ".tif", ".tiff"]);
 const OUTPUT_EXT = { png: ".png", jpg: ".jpg", webp: ".webp", zip: ".zip" };
@@ -25,6 +27,8 @@ const ALIASES = { h: "help", v: "version" };
 export const HELP = `lassocut ${VERSION}: remove image backgrounds from the command line
 
 Usage:
+  lassocut login                  sign in with your lassocut account in the browser (saves a key)
+  lassocut logout                 forget the saved key
   lassocut [flags] <file | folder | pattern>...
 
 Flags:
@@ -67,9 +71,21 @@ export function parseArgs(argv) {
 
 export class UsageError extends Error {}
 
+// Where `lassocut login` keeps the key: %APPDATA%\lassocut on Windows, ~/.config/lassocut elsewhere.
+export function configPath(env = process.env) {
+  if (env.LASSOCUT_CONFIG) return env.LASSOCUT_CONFIG;
+  const base = process.platform === "win32" ? (env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"))
+    : (env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"));
+  return path.join(base, "lassocut", "config.json");
+}
+
+function savedKey(env) {
+  try { return JSON.parse(readFileSync(configPath(env), "utf8")).api_key || ""; } catch { return ""; }
+}
+
 export function resolveConfig(opts, env = process.env) {
-  const apiKey = opts["api-key"] || env.LASSOCUT_API_KEY || env.REMOVE_BG_API_KEY;
-  if (!apiKey) throw new UsageError("an API key is required: --api-key or LASSOCUT_API_KEY");
+  const apiKey = opts["api-key"] || env.LASSOCUT_API_KEY || env.REMOVE_BG_API_KEY || savedKey(env);
+  if (!apiKey) throw new UsageError("no API key: run `lassocut login`, or pass --api-key / set LASSOCUT_API_KEY");
   const format = (opts.format || "png").toLowerCase();
   if (!OUTPUT_EXT[format]) throw new UsageError(`unsupported --format: ${opts.format}`);
   const int = (v, d, name) => {
@@ -149,7 +165,57 @@ async function callApi(file, cfg, attempt = 1) {
   return { bytes: Buffer.from(await res.arrayBuffer()), credits: Number(res.headers.get("x-credits-charged") || 0) };
 }
 
-export async function run(argv, { log = console.log, error = console.error, confirm = askYesNo, env = process.env } = {}) {
+function apiUrlOf(env) {
+  return (env.LASSOCUT_API_URL || env.REMOVE_BG_API_URL || DEFAULT_API_URL).replace(/\/+$/, "");
+}
+
+async function postJson(url, data) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": `lassocut-cli/${VERSION}` }, body: JSON.stringify(data) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function openInBrowser(url) {
+  const [cmd, args] = process.platform === "win32" ? ["cmd", ["/c", "start", "", url]]
+    : process.platform === "darwin" ? ["open", [url]] : ["xdg-open", [url]];
+  try { spawn(cmd, args, { stdio: "ignore", detached: true }).unref(); } catch { /* the URL is printed anyway */ }
+}
+
+// Sign in without copying a key: the browser opens lassocut, the user approves, the API hands the CLI a key.
+async function login({ log, error, env, openUrl, sleep }) {
+  const api = apiUrlOf(env);
+  let start;
+  try { start = await postJson(`${api}/connect/start`, { client: "cli" }); }
+  catch (e) { error(`Error: could not reach lassocut (${e.message})`); return 1; }
+  log(`Opening ${start.verification_url}`);
+  log(`Approve the connection in your browser; the code is ${start.user_code}. Waiting…`);
+  openUrl(start.verification_url);
+  const deadline = Date.now() + (start.expires_in || 600) * 1000;
+  while (Date.now() < deadline) {
+    await sleep((start.interval ?? 3) * 1000);
+    let got;
+    try { got = await postJson(`${api}/connect/poll`, { device_code: start.device_code }); } catch { continue; }
+    if (got.status === "approved") {
+      const file = configPath(env);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify({ api_key: got.api_key }, null, 2), { mode: 0o600 });
+      log(`Signed in. The key is saved in ${file}; run \`lassocut logout\` to remove it.`);
+      return 0;
+    }
+    if (got.status === "denied" || got.status === "expired") break;
+  }
+  error("Error: the connection was not approved; run `lassocut login` again");
+  return 1;
+}
+
+export async function run(argv, { log = console.log, error = console.error, confirm = askYesNo, env = process.env,
+  openUrl = openInBrowser, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  if (argv[0] === "login") return login({ log, error, env, openUrl, sleep });
+  if (argv[0] === "logout") {
+    await rm(configPath(env), { force: true });
+    log("Signed out: the saved key is removed. It still works until you delete it at https://www.lassocut.com/account/");
+    return 0;
+  }
   let parsed, cfg;
   try {
     parsed = parseArgs(argv);
