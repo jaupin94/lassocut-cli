@@ -9,7 +9,7 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.1.0";
+export const VERSION = "1.1.1";
 export const DEFAULT_API_URL = "https://api.lassocut.com/v1.0";
 const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".bmp", ".tif", ".tiff"]);
 const OUTPUT_EXT = { png: ".png", jpg: ".jpg", webp: ".webp", zip: ".zip" };
@@ -27,7 +27,7 @@ const ALIASES = { h: "help", v: "version" };
 export const HELP = `lassocut ${VERSION}: remove image backgrounds from the command line
 
 Usage:
-  lassocut login                  sign in with your lassocut account in the browser (saves a key)
+  lassocut login                  sign in with your LassoCut account in the browser (saves a key)
   lassocut logout                 forget the saved key
   lassocut [flags] <file | folder | pattern>...
 
@@ -186,7 +186,7 @@ async function login({ log, error, env, openUrl, sleep }) {
   const api = apiUrlOf(env);
   let start;
   try { start = await postJson(`${api}/connect/start`, { client: "cli" }); }
-  catch (e) { error(`Error: could not reach lassocut (${e.message})`); return 1; }
+  catch (e) { error(`Error: could not reach LassoCut (${e.message})`); return 1; }
   log(`Opening ${start.verification_url}`);
   log(`Approve the connection in your browser; the code is ${start.user_code}. Waiting…`);
   openUrl(start.verification_url);

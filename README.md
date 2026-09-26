@@ -1,6 +1,6 @@
-# lassocut CLI
+# LassoCut CLI
 
-Remove image backgrounds in bulk from the command line with the [lassocut API](https://www.lassocut.com/docs/).
+Remove image backgrounds in bulk from the command line with the [LassoCut API](https://www.lassocut.com/docs/).
 One file, no dependencies, Node.js 18 or later.
 
 ```sh
@@ -26,4 +26,4 @@ Rate limits (429) and temporary errors (503) are retried automatically.
 Install: `npm install -g lassocut-cli` (or run once with `npx lassocut-cli`). Run `lassocut --help` for the full list. Tests: `npm test`.
 
 MIT licence, copyright (c) 2026 JAUPIN Design LLC. remove.bg is a trademark of Canva Austria GmbH;
-lassocut is not affiliated with it.
+LassoCut is not affiliated with it.
