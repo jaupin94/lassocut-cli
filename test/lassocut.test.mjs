@@ -48,7 +48,7 @@ test("flags: values, inline values, repeatable options, aliases", () => {
 });
 
 test("config: key and URL from flags, then LASSOCUT_*, then REMOVE_BG_*", () => {
-  assert.throws(() => resolveConfig({ "extra-api-option": [] }, {}), UsageError);
+  assert.throws(() => resolveConfig({ "extra-api-option": [] }, { LASSOCUT_CONFIG: "no-such-config.json" }), UsageError);
   let cfg = resolveConfig({ "extra-api-option": [] }, { REMOVE_BG_API_KEY: "old" });
   assert.equal(cfg.apiKey, "old");
   assert.equal(cfg.apiUrl, DEFAULT_API_URL);
