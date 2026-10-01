@@ -20,3 +20,8 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm test
       - run: npm publish --provenance --access public
+      # The same tool under the short name too, so `npm install -g lassocut` works.
+      # Needs a Trusted Publisher on the npm package "lassocut" for this repository and workflow.
+      - run: |
+          npm pkg set name=lassocut
+          npm view "lassocut@$(node -p 'require("./package.json").version')" version || npm publish --provenance --access public
