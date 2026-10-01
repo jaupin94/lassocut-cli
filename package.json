@@ -17,7 +17,7 @@
   "scripts": {
     "test": "node --test test/lassocut.test.mjs"
   },
-  "homepage": "https://www.lassocut.com",
+  "homepage": "https://www.lassocut.com/migrate/cli/",
   "author": "JAUPIN Design LLC",
   "license": "MIT",
   "repository": {
@@ -26,5 +26,15 @@
   },
   "bugs": {
     "url": "https://github.com/jaupin94/lassocut-cli/issues"
-  }
+  },
+  "keywords": [
+    "background-removal",
+    "remove-background",
+    "background-remover",
+    "cli",
+    "batch",
+    "image-processing",
+    "removebg-api",
+    "lassocut"
+  ]
 }
